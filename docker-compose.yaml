@@ -1,0 +1,16 @@
+services:
+  novapay:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+
+    container_name: novapay-compose
+
+    ports:
+      - "3000:3000"
+
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+
+    restart: unless-stopped
