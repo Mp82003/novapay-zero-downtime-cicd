@@ -1,3 +1,4 @@
+
 pipeline {
     agent any
 
@@ -10,7 +11,7 @@ pipeline {
         stage('Checkout') {
             steps {
                 git branch: 'main',
-                    url: 'git@github.com:Mp82003/novapay-zero-downtime-cicd.git'
+                    url: 'https://github.com/Mp82003/novapay-zero-downtime-cicd.git'
             }
         }
 
@@ -43,3 +44,4 @@ pipeline {
         }
     }
 }
+
