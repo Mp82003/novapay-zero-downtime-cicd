@@ -1,18 +1,9 @@
 
-
 pipeline {
     agent any
 
     tools {
         nodejs 'NodeJS-22'
-    }
-
-    environment {
-        DOCKER_NETWORK = 'novapay-network'
-        API_IMAGE = 'novapay-api:day7'
-        API_CONTAINER = 'novapay-dast-target'
-        ZAP_IMAGE = 'ghcr.io/zaproxy/zaproxy:stable'
-        API_PORT = '3000'
     }
 
     stages {
@@ -65,26 +56,24 @@ pipeline {
 
         stage('Build API Docker Image') {
             steps {
-                sh '''
-                    docker build -t ${API_IMAGE} ./app
-                '''
+                sh 'docker build -t novapay-api:day7 ./app'
             }
         }
 
         stage('Start DAST Target') {
             steps {
                 sh '''
-                    docker rm -f ${API_CONTAINER} 2>/dev/null || true
+                    docker rm -f novapay-dast-target || true
 
                     docker run -d \
-                        --name ${API_CONTAINER} \
-                        --network ${DOCKER_NETWORK} \
-                        ${API_IMAGE}
+                        --name novapay-dast-target \
+                        --network novapay-network \
+                        novapay-api:day7
 
                     sleep 5
 
-                    docker exec ${API_CONTAINER} \
-                        wget -qO- http://localhost:${API_PORT}/health
+                    docker exec novapay-dast-target \
+                        wget -qO- http://localhost:3000/health
                 '''
             }
         }
@@ -93,27 +82,26 @@ pipeline {
             steps {
                 sh '''
                     mkdir -p security/reports
-
                     chmod 777 security/reports
 
                     docker run --rm \
-                        --network ${DOCKER_NETWORK} \
+                        --user 0:0 \
+                        --network novapay-network \
                         -v "$WORKSPACE/security/reports:/zap/wrk/:rw" \
-                        ${ZAP_IMAGE} \
+                        ghcr.io/zaproxy/zaproxy:stable \
                         zap-baseline.py \
-                        -t http://${API_CONTAINER}:${API_PORT}/health \
+                        -t http://novapay-dast-target:3000/health \
                         -r day7-jenkins-zap-report.html \
                         -J day7-jenkins-zap-report.json
                 '''
             }
         }
-
     }
 
     post {
         always {
             sh '''
-                docker rm -f ${API_CONTAINER} 2>/dev/null || true
+                docker rm -f novapay-dast-target || true
             '''
 
             archiveArtifacts(
@@ -123,11 +111,11 @@ pipeline {
         }
 
         success {
-            echo 'NovaPay CI/CD Pipeline with DAST completed successfully!'
+            echo 'NovaPay CI/CD Pipeline completed successfully!'
         }
 
         failure {
-            echo 'Pipeline failed. Check Jenkins Console Output.'
+            echo 'Pipeline failed. Check the Jenkins Console Output.'
         }
     }
 }
