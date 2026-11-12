@@ -50,15 +50,19 @@ pipeline {
 
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv('SonarQube') {
-                    sh '''
-                        sonar-scanner \
-                          -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
-                          -Dsonar.sources=app/src \
-                          -Dsonar.tests=app/tests \
-                          -Dsonar.test.inclusions=app/tests/**/*.test.js \
-                          -Dsonar.javascript.lcov.reportPaths=app/coverage/lcov.info
-                    '''
+                script {
+                    def scannerHome = tool 'SonarScanner'
+
+                    withSonarQubeEnv('SonarQube') {
+                        sh """
+                            "\${scannerHome}/bin/sonar-scanner" \
+                              -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                              -Dsonar.sources=app/src \
+                              -Dsonar.tests=app/tests \
+                              -Dsonar.test.inclusions=app/tests/**/*.test.js \
+                              -Dsonar.javascript.lcov.reportPaths=app/coverage/lcov.info
+                        """
+                    }
                 }
             }
         }
@@ -122,8 +126,10 @@ pipeline {
 
                     if [ "$ZAP_EXIT_CODE" -eq 0 ]; then
                         echo "ZAP scan completed successfully."
+
                     elif [ "$ZAP_EXIT_CODE" -eq 2 ]; then
                         echo "ZAP scan completed with warnings. No new FAIL alerts."
+
                     else
                         echo "ZAP scan failed with exit code: $ZAP_EXIT_CODE"
                         exit "$ZAP_EXIT_CODE"
