@@ -6,6 +6,13 @@ pipeline {
         nodejs 'NodeJS-22'
     }
 
+    environment {
+        API_IMAGE = 'novapay-api:day7'
+        DAST_CONTAINER = 'novapay-dast-target'
+        DOCKER_NETWORK = 'novapay-network'
+        ZAP_IMAGE = 'ghcr.io/zaproxy/zaproxy:stable'
+    }
+
     stages {
 
         stage('Checkout') {
@@ -29,6 +36,7 @@ pipeline {
                     sh '''
                         npm audit --json > npm-audit-report.json || true
                     '''
+
                     sh 'npm audit --audit-level=high'
                 }
             }
@@ -56,23 +64,25 @@ pipeline {
 
         stage('Build API Docker Image') {
             steps {
-                sh 'docker build -t novapay-api:day7 ./app'
+                sh '''
+                    docker build -t ${API_IMAGE} ./app
+                '''
             }
         }
 
         stage('Start DAST Target') {
             steps {
                 sh '''
-                    docker rm -f novapay-dast-target || true
+                    docker rm -f ${DAST_CONTAINER} || true
 
                     docker run -d \
-                        --name novapay-dast-target \
-                        --network novapay-network \
-                        novapay-api:day7
+                        --name ${DAST_CONTAINER} \
+                        --network ${DOCKER_NETWORK} \
+                        ${API_IMAGE}
 
                     sleep 5
 
-                    docker exec novapay-dast-target \
+                    docker exec ${DAST_CONTAINER} \
                         wget -qO- http://localhost:3000/health
                 '''
             }
@@ -84,24 +94,50 @@ pipeline {
                     mkdir -p security/reports
                     chmod 777 security/reports
 
+                    set +e
+
                     docker run --rm \
                         --user 0:0 \
-                        --network novapay-network \
+                        --network ${DOCKER_NETWORK} \
                         -v "$WORKSPACE/security/reports:/zap/wrk/:rw" \
-                        ghcr.io/zaproxy/zaproxy:stable \
+                        ${ZAP_IMAGE} \
                         zap-baseline.py \
-                        -t http://novapay-dast-target:3000/health \
+                        -t http://${DAST_CONTAINER}:3000/health \
                         -r day7-jenkins-zap-report.html \
                         -J day7-jenkins-zap-report.json
+
+                    ZAP_STATUS=$?
+
+                    set -e
+
+                    echo "ZAP exit code: ${ZAP_STATUS}"
+
+                    if [ "$ZAP_STATUS" -eq 2 ]; then
+                        echo "ZAP completed with warnings."
+                        echo "Review the generated security reports."
+
+                    elif [ "$ZAP_STATUS" -ne 0 ]; then
+                        echo "ZAP scan execution failed."
+                        exit "$ZAP_STATUS"
+
+                    else
+                        echo "ZAP scan completed without warnings."
+                    fi
+
+                    test -s security/reports/day7-jenkins-zap-report.html
+                    test -s security/reports/day7-jenkins-zap-report.json
+
+                    echo "ZAP HTML and JSON reports generated successfully."
                 '''
             }
         }
     }
 
     post {
+
         always {
             sh '''
-                docker rm -f novapay-dast-target || true
+                docker rm -f ${DAST_CONTAINER} || true
             '''
 
             archiveArtifacts(

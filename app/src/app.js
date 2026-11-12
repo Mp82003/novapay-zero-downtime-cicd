@@ -1,15 +1,37 @@
+
 const express = require('express');
 
 const app = express();
 
-// Security: Disable Express version disclosure
+// Hide Express technology information
 app.disable('x-powered-by');
 
 // Security headers middleware
 app.use((req, res, next) => {
+
     res.setHeader(
         'Content-Security-Policy',
-        "default-src 'none'; frame-ancestors 'none'; form-action 'none'"
+        "default-src 'none'; " +
+        "base-uri 'none'; " +
+        "object-src 'none'; " +
+        "script-src 'none'; " +
+        "style-src 'none'; " +
+        "img-src 'none'; " +
+        "connect-src 'none'; " +
+        "font-src 'none'; " +
+        "frame-src 'none'; " +
+        "media-src 'none'; " +
+        "worker-src 'none'; " +
+        "manifest-src 'none'; " +
+        "frame-ancestors 'none'; " +
+        "form-action 'none'"
+    );
+
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+
+    res.setHeader(
+        'Cross-Origin-Resource-Policy',
+        'same-origin'
     );
 
     res.setHeader(
@@ -28,18 +50,18 @@ app.use((req, res, next) => {
     next();
 });
 
+// Parse JSON request bodies
+app.use(express.json());
+
 // Import routes
 const healthRoutes = require('./routes/health');
 const versionRoutes = require('./routes/version');
 const accountsRoutes = require('./routes/accounts');
-
-// Middleware
-app.use(express.json());
 
 // Register routes
 app.use('/', healthRoutes);
 app.use('/', versionRoutes);
 app.use('/', accountsRoutes);
 
-// Export app
+// Export application
 module.exports = app;
