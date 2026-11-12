@@ -91,41 +91,54 @@ pipeline {
         stage('OWASP ZAP DAST Scan') {
             steps {
                 sh '''
-                    mkdir -p security/reports
-                    chmod 777 security/reports
+                    set -eu
+
+                    echo "Preparing ZAP report directory..."
+
+                    mkdir -p "$WORKSPACE/security/reports"
+                    chmod 777 "$WORKSPACE/security/reports"
+
+                    rm -f "$WORKSPACE/security/reports/day7-jenkins-zap-report.html"
+                    rm -f "$WORKSPACE/security/reports/day7-jenkins-zap-report.json"
+
+                    echo "Starting OWASP ZAP scan..."
 
                     set +e
 
                     docker run --rm \
                         --user 0:0 \
                         --network ${DOCKER_NETWORK} \
-                        -v "$WORKSPACE/security/reports:/zap/wrk/:rw" \
+                        -v "$WORKSPACE/security/reports:/zap/wrk:rw" \
                         ${ZAP_IMAGE} \
                         zap-baseline.py \
                         -t http://${DAST_CONTAINER}:3000/health \
-                        -r day7-jenkins-zap-report.html \
-                        -J day7-jenkins-zap-report.json
+                        -r /zap/wrk/day7-jenkins-zap-report.html \
+                        -J /zap/wrk/day7-jenkins-zap-report.json
 
                     ZAP_STATUS=$?
 
                     set -e
 
-                    echo "ZAP exit code: ${ZAP_STATUS}"
+                    echo "ZAP exit code: $ZAP_STATUS"
 
-                    if [ "$ZAP_STATUS" -eq 2 ]; then
-                        echo "ZAP completed with warnings."
+                    if [ "$ZAP_STATUS" -eq 0 ]; then
+                        echo "ZAP scan completed without warnings."
+
+                    elif [ "$ZAP_STATUS" -eq 2 ]; then
+                        echo "ZAP scan completed with warnings."
                         echo "Review the generated security reports."
 
-                    elif [ "$ZAP_STATUS" -ne 0 ]; then
-                        echo "ZAP scan execution failed."
-                        exit "$ZAP_STATUS"
-
                     else
-                        echo "ZAP scan completed without warnings."
+                        echo "ZAP scan failed or reported FAIL alerts."
+                        exit "$ZAP_STATUS"
                     fi
 
-                    test -s security/reports/day7-jenkins-zap-report.html
-                    test -s security/reports/day7-jenkins-zap-report.json
+                    echo "Checking generated ZAP reports..."
+
+                    ls -lah "$WORKSPACE/security/reports"
+
+                    test -s "$WORKSPACE/security/reports/day7-jenkins-zap-report.html"
+                    test -s "$WORKSPACE/security/reports/day7-jenkins-zap-report.json"
 
                     echo "ZAP HTML and JSON reports generated successfully."
                 '''
