@@ -110,6 +110,8 @@ pipeline {
                 sh '''
                     mkdir -p "$WORKSPACE/security/reports"
 
+                    echo "Starting OWASP ZAP Baseline Scan..."
+
                     set +e
 
                     docker run --rm \
@@ -118,6 +120,7 @@ pipeline {
                       -v "$WORKSPACE/security/reports:/zap/wrk:rw" \
                       ghcr.io/zaproxy/zaproxy:stable \
                       zap-baseline.py \
+                      --autooff \
                       -t http://${DAST_CONTAINER}:3000/health \
                       -r day7-jenkins-zap-report.html \
                       -J day7-jenkins-zap-report.json
@@ -126,23 +129,32 @@ pipeline {
 
                     set -e
 
+                    echo "ZAP exit code: $ZAP_EXIT_CODE"
+
                     if [ "$ZAP_EXIT_CODE" -eq 0 ]; then
-                        echo "ZAP scan completed successfully."
+                        echo "ZAP scan completed without warnings."
                     elif [ "$ZAP_EXIT_CODE" -eq 2 ]; then
-                        echo "ZAP scan completed with warnings. No new FAIL alerts."
+                        echo "ZAP scan completed with warnings and no FAIL alerts."
                     else
-                        echo "ZAP scan failed with exit code: $ZAP_EXIT_CODE"
+                        echo "ZAP scan failed."
                         exit "$ZAP_EXIT_CODE"
                     fi
 
-                    echo "Checking generated ZAP reports..."
+                    echo "Checking report directory..."
 
-                    test -s "$WORKSPACE/security/reports/day7-jenkins-zap-report.html"
-                    test -s "$WORKSPACE/security/reports/day7-jenkins-zap-report.json"
+                    ls -lah "$WORKSPACE/security/reports"
+
+                    if [ ! -s "$WORKSPACE/security/reports/day7-jenkins-zap-report.html" ]; then
+                        echo "ERROR: ZAP HTML report was not generated."
+                        exit 1
+                    fi
+
+                    if [ ! -s "$WORKSPACE/security/reports/day7-jenkins-zap-report.json" ]; then
+                        echo "ERROR: ZAP JSON report was not generated."
+                        exit 1
+                    fi
 
                     echo "Both ZAP reports generated successfully."
-
-                    ls -lh "$WORKSPACE/security/reports/"
                 '''
             }
         }
