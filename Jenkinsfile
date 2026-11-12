@@ -1,4 +1,5 @@
 
+
 pipeline {
     agent any
 
@@ -6,9 +7,16 @@ pipeline {
         nodejs 'NodeJS-22'
     }
 
+    environment {
+        DOCKER_NETWORK = 'novapay-network'
+        API_IMAGE = 'novapay-api:day7'
+        API_CONTAINER = 'novapay-dast-target'
+        ZAP_IMAGE = 'ghcr.io/zaproxy/zaproxy:stable'
+        API_PORT = '3000'
+    }
+
     stages {
 
-        // Stage 1: Checkout source code
         stage('Checkout') {
             steps {
                 git branch: 'main',
@@ -16,7 +24,6 @@ pipeline {
             }
         }
 
-        // Stage 2: Install application dependencies
         stage('Install Dependencies') {
             steps {
                 dir('app') {
@@ -25,24 +32,17 @@ pipeline {
             }
         }
 
-        // Stage 3: Dependency vulnerability scanning
         stage('Dependency Security Scan') {
             steps {
                 dir('app') {
-                    echo 'Generating dependency vulnerability report...'
-
                     sh '''
                         npm audit --json > npm-audit-report.json || true
                     '''
-
-                    echo 'Enforcing dependency security policy...'
-
                     sh 'npm audit --audit-level=high'
                 }
             }
         }
 
-        // Stage 4: Run automated application tests
         stage('Run Tests') {
             steps {
                 dir('app') {
@@ -51,7 +51,6 @@ pipeline {
             }
         }
 
-        // Stage 5: SonarQube code analysis
         stage('SonarQube Analysis') {
             steps {
                 script {
@@ -63,25 +62,73 @@ pipeline {
                 }
             }
         }
+
+        stage('Build API Docker Image') {
+            steps {
+                sh '''
+                    docker build -t ${API_IMAGE} ./app
+                '''
+            }
+        }
+
+        stage('Start DAST Target') {
+            steps {
+                sh '''
+                    docker rm -f ${API_CONTAINER} 2>/dev/null || true
+
+                    docker run -d \
+                        --name ${API_CONTAINER} \
+                        --network ${DOCKER_NETWORK} \
+                        ${API_IMAGE}
+
+                    sleep 5
+
+                    docker exec ${API_CONTAINER} \
+                        wget -qO- http://localhost:${API_PORT}/health
+                '''
+            }
+        }
+
+        stage('OWASP ZAP DAST Scan') {
+            steps {
+                sh '''
+                    mkdir -p security/reports
+
+                    chmod 777 security/reports
+
+                    docker run --rm \
+                        --network ${DOCKER_NETWORK} \
+                        -v "$WORKSPACE/security/reports:/zap/wrk/:rw" \
+                        ${ZAP_IMAGE} \
+                        zap-baseline.py \
+                        -t http://${API_CONTAINER}:${API_PORT}/health \
+                        -r day7-jenkins-zap-report.html \
+                        -J day7-jenkins-zap-report.json
+                '''
+            }
+        }
+
     }
 
-    // Archive security report even if a stage fails
     post {
         always {
+            sh '''
+                docker rm -f ${API_CONTAINER} 2>/dev/null || true
+            '''
+
             archiveArtifacts(
-                artifacts: 'app/npm-audit-report.json',
+                artifacts: 'app/npm-audit-report.json,security/reports/*',
                 allowEmptyArchive: true
             )
         }
 
         success {
-            echo 'NovaPay CI/CD Pipeline completed successfully!'
+            echo 'NovaPay CI/CD Pipeline with DAST completed successfully!'
         }
 
         failure {
-            echo 'Pipeline failed. Check the Jenkins Console Output.'
+            echo 'Pipeline failed. Check Jenkins Console Output.'
         }
     }
 }
-
 
