@@ -61,8 +61,7 @@ pipeline {
                               -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
                               -Dsonar.sources=app/src \
                               -Dsonar.tests=app/tests \
-                              -Dsonar.test.inclusions=app/tests/**/*.test.js \
-                              -Dsonar.javascript.lcov.reportPaths=app/coverage/lcov.info
+                              -Dsonar.test.inclusions=app/tests/**/*.test.js
                         """
                     }
                 }
@@ -85,7 +84,7 @@ pipeline {
                       --network ${DOCKER_NETWORK} \
                       ${APP_IMAGE}
 
-                    echo "Waiting for API to become healthy..."
+                    echo "Waiting for API health..."
 
                     for i in $(seq 1 30); do
                         if docker exec ${DAST_CONTAINER} \
@@ -108,22 +107,31 @@ pipeline {
         stage('OWASP ZAP DAST Scan') {
             steps {
                 sh '''
-                    mkdir -p "$WORKSPACE/security/reports"
+                    set -eu
 
-                    echo "Starting OWASP ZAP Baseline Scan..."
+                    REPORT_DIR="$WORKSPACE/security/reports"
+                    HTML_REPORT="day7-jenkins-zap-report.html"
+                    JSON_REPORT="day7-jenkins-zap-report.json"
+
+                    mkdir -p "$REPORT_DIR"
+
+                    rm -f "$REPORT_DIR/$HTML_REPORT"
+                    rm -f "$REPORT_DIR/$JSON_REPORT"
+
+                    echo "Starting OWASP ZAP baseline scan..."
 
                     set +e
 
                     docker run --rm \
                       --user 0:0 \
                       --network ${DOCKER_NETWORK} \
-                      -v "$WORKSPACE/security/reports:/zap/wrk:rw" \
+                      -v "$REPORT_DIR:/zap/wrk:rw" \
                       ghcr.io/zaproxy/zaproxy:stable \
                       zap-baseline.py \
                       --autooff \
                       -t http://${DAST_CONTAINER}:3000/health \
-                      -r day7-jenkins-zap-report.html \
-                      -J day7-jenkins-zap-report.json
+                      -r "/zap/wrk/$HTML_REPORT" \
+                      -J "/zap/wrk/$JSON_REPORT"
 
                     ZAP_EXIT_CODE=$?
 
@@ -131,30 +139,28 @@ pipeline {
 
                     echo "ZAP exit code: $ZAP_EXIT_CODE"
 
-                    if [ "$ZAP_EXIT_CODE" -eq 0 ]; then
-                        echo "ZAP scan completed without warnings."
-                    elif [ "$ZAP_EXIT_CODE" -eq 2 ]; then
-                        echo "ZAP scan completed with warnings and no FAIL alerts."
-                    else
+                    if [ "$ZAP_EXIT_CODE" -ne 0 ] && [ "$ZAP_EXIT_CODE" -ne 2 ]; then
                         echo "ZAP scan failed."
                         exit "$ZAP_EXIT_CODE"
                     fi
 
-                    echo "Checking report directory..."
+                    echo "ZAP scan completed. Checking generated reports..."
 
-                    ls -lah "$WORKSPACE/security/reports"
+                    echo "Report directory contents:"
+                    find "$REPORT_DIR" -maxdepth 4 -type f -printf '%p (%s bytes)\\n'
 
-                    if [ ! -s "$WORKSPACE/security/reports/day7-jenkins-zap-report.html" ]; then
-                        echo "ERROR: ZAP HTML report was not generated."
+                    if [ ! -s "$REPORT_DIR/$HTML_REPORT" ]; then
+                        echo "ERROR: HTML report missing or empty."
                         exit 1
                     fi
 
-                    if [ ! -s "$WORKSPACE/security/reports/day7-jenkins-zap-report.json" ]; then
-                        echo "ERROR: ZAP JSON report was not generated."
+                    if [ ! -s "$REPORT_DIR/$JSON_REPORT" ]; then
+                        echo "ERROR: JSON report missing or empty."
                         exit 1
                     fi
 
-                    echo "Both ZAP reports generated successfully."
+                    echo "HTML report generated successfully."
+                    echo "JSON report generated successfully."
                 '''
             }
         }
