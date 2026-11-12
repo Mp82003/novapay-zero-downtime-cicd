@@ -113,11 +113,28 @@ pipeline {
                     HTML_REPORT="day7-jenkins-zap-report.html"
                     JSON_REPORT="day7-jenkins-zap-report.json"
 
+                    # Jenkins workspace must be inside the Jenkins home volume.
+                    case "$WORKSPACE" in
+                        /var/jenkins_home/*)
+                            WORKSPACE_REL="${WORKSPACE#/var/jenkins_home/}"
+                            ;;
+                        *)
+                            echo "ERROR: Workspace is outside /var/jenkins_home."
+                            echo "Workspace: $WORKSPACE"
+                            exit 1
+                            ;;
+                    esac
+
+                    # The named Jenkins volume is mounted at /zap/wrk.
+                    ZAP_REPORT_DIR="/zap/wrk/$WORKSPACE_REL/security/reports"
+
                     mkdir -p "$REPORT_DIR"
 
                     rm -f "$REPORT_DIR/$HTML_REPORT"
                     rm -f "$REPORT_DIR/$JSON_REPORT"
 
+                    echo "Jenkins report directory: $REPORT_DIR"
+                    echo "ZAP report directory: $ZAP_REPORT_DIR"
                     echo "Starting OWASP ZAP baseline scan..."
 
                     set +e
@@ -125,13 +142,13 @@ pipeline {
                     docker run --rm \
                       --user 0:0 \
                       --network ${DOCKER_NETWORK} \
-                      -v "$REPORT_DIR:/zap/wrk:rw" \
+                      -v jenkins_home:/zap/wrk:rw \
                       ghcr.io/zaproxy/zaproxy:stable \
                       zap-baseline.py \
                       --autooff \
                       -t http://${DAST_CONTAINER}:3000/health \
-                      -r "/zap/wrk/$HTML_REPORT" \
-                      -J "/zap/wrk/$JSON_REPORT"
+                      -r "$ZAP_REPORT_DIR/$HTML_REPORT" \
+                      -J "$ZAP_REPORT_DIR/$JSON_REPORT"
 
                     ZAP_EXIT_CODE=$?
 
@@ -147,7 +164,7 @@ pipeline {
                     echo "ZAP scan completed. Checking generated reports..."
 
                     echo "Report directory contents:"
-                    find "$REPORT_DIR" -maxdepth 4 -type f -printf '%p (%s bytes)\\n'
+                    find "$REPORT_DIR" -maxdepth 2 -type f -printf '%p (%s bytes)\\n'
 
                     if [ ! -s "$REPORT_DIR/$HTML_REPORT" ]; then
                         echo "ERROR: HTML report missing or empty."
