@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: novapay-api
-          image: novapay-api:green-v3
+          image: novapay-api:green-v3-db
           imagePullPolicy: Never
 
           command: ["node"]
@@ -33,6 +33,32 @@ spec:
                 name: novapay-config
             - secretRef:
                 name: novapay-secret
+
+          # PostgreSQL connection configuration
+          env:
+            - name: DB_HOST
+              value: "novapay-postgres"
+
+            - name: DB_PORT
+              value: "5432"
+
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: novapay-postgres-secret
+                  key: POSTGRES_DB
+
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: novapay-postgres-secret
+                  key: POSTGRES_USER
+
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: novapay-postgres-secret
+                  key: POSTGRES_PASSWORD
 
           livenessProbe:
             httpGet:

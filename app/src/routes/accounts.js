@@ -1,34 +1,37 @@
+
 const express = require('express');
-
 const router = express.Router();
+const pool = require('../config/db');
 
-// Simulated bank account data
-const accounts = [
-    {
-        id: 1,
-        accountHolder: 'Rahul Sharma',
-        accountType: 'Savings',
-        balance: 25000,
-        currency: 'INR'
-    },
-    {
-        id: 2,
-        accountHolder: 'Priya Singh',
-        accountType: 'Current',
-        balance: 50000,
-        currency: 'INR'
+// Get all accounts from PostgreSQL
+router.get('/api/accounts', async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT
+                id,
+                account_holder AS "accountHolder",
+                account_type AS "accountType",
+                balance,
+                currency
+             FROM accounts
+             ORDER BY id`
+        );
+
+        res.status(200).json({
+            success: true,
+            count: result.rows.length,
+            accounts: result.rows
+        });
+
+    } catch (error) {
+        console.error('Database query failed:', error.message);
+
+        res.status(500).json({
+            success: false,
+            message: 'Unable to fetch accounts'
+        });
     }
-];
-
-// Get all accounts
-router.get('/api/accounts', (req, res) => {
-    res.status(200).json({
-        success: true,
-        count: accounts.length,
-        accounts: accounts
-    });
 });
 
 module.exports = router;
-
 
