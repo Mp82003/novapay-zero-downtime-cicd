@@ -3,6 +3,12 @@ const express = require('express');
 
 const app = express();
 
+// Prometheus metrics integration
+const {
+    metricsMiddleware,
+    metricsHandler
+} = require('./metrics');
+
 // Hide Express technology information
 app.disable('x-powered-by');
 
@@ -53,6 +59,12 @@ app.use((req, res, next) => {
 // Parse JSON request bodies
 app.use(express.json());
 
+// Prometheus monitoring middleware
+app.use(metricsMiddleware);
+
+// Prometheus metrics endpoint
+app.get('/metrics', metricsHandler);
+
 // Import routes
 const healthRoutes = require('./routes/health');
 const versionRoutes = require('./routes/version');
@@ -65,3 +77,4 @@ app.use('/', accountsRoutes);
 
 // Export application
 module.exports = app;
+

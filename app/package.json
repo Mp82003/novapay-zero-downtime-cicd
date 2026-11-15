@@ -17,6 +17,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@prometheus-io/client": "^0.16.1",
     "express": "^5.3.0",
     "pg": "^8.23.1"
   },

@@ -1,0 +1,11 @@
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'novapay-api'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['novapay-api-monitoring:3000']
+
