@@ -1,9 +1,36 @@
+
+# Node.js
 node_modules/
+coverage/
+npm-debug.log*
+
+# Environment files
 .env
 .env.*
 !.env.example
-coverage/
-npm-debug.log*
+
+# OS files
 .DS_Store
+
+# Kubernetes secrets
 kubernetes/secret.yaml
 kubernetes/postgres-secret.yaml
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Terraform crash logs
+crash.log
+crash.*.log
+
+# Keep Terraform dependency lock files
+!**/.terraform.lock.hcl
+
