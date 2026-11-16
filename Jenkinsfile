@@ -189,6 +189,64 @@ pipeline {
                 '''
             }
         }
+
+        // DAY 14: KUBERNETES DEPLOYMENT
+
+        stage('Deploy to Kubernetes') {
+            steps {
+                withCredentials([
+                    string(
+                        credentialsId: 'k8s-jenkins-token',
+                        variable: 'K8S_TOKEN'
+                    )
+                ]) {
+                    sh '''
+                        set +x
+                        set -eu
+
+                        KUBECTL="kubectl \
+                          --server=https://minikube:8443 \
+                          --certificate-authority=/tmp/minikube-ca.crt \
+                          --token=$K8S_TOKEN"
+
+                        echo "Checking Kubernetes connectivity..."
+
+                        $KUBECTL auth can-i patch deployment/novapay-api \
+                            -n default
+
+                        echo "Checking current deployment..."
+
+                        $KUBECTL get deployment novapay-api -n default
+
+                        echo "Updating NovaPay Kubernetes deployment..."
+
+                        $KUBECTL set image deployment/novapay-api \
+                            novapay-api=novapay-api:jenkins-test \
+                            -n default
+
+                        echo "Waiting for Kubernetes rollout..."
+
+                        $KUBECTL rollout status deployment/novapay-api \
+                            -n default \
+                            --timeout=180s
+
+                        echo "Verifying deployed image..."
+
+                        $KUBECTL get deployment novapay-api \
+                            -o jsonpath='{.spec.template.spec.containers[0].image}{"\\n"}' \
+                            -n default
+
+                        echo "Verifying replica availability..."
+
+                        $KUBECTL get deployment novapay-api \
+                            -o wide \
+                            -n default
+
+                        echo "NovaPay Kubernetes deployment completed successfully."
+                    '''
+                }
+            }
+        }
     }
 
     post {
